@@ -1,4 +1,20 @@
 import os
+import call_function
+from google.genai import types #type: ignore
+
+schema_get_files_info = types.FunctionDeclaration(
+    name="get_files_info",
+    description="Get a list of files in a directory with their size and type information",
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "directory": types.Schema(
+                type=types.Type.STRING,
+                description="The directory to list files from, relative to the working directory. Default is '.'"
+            ),
+        },
+    ),
+)
 
 def get_files_info(working_directory, directory="."):
     try:
