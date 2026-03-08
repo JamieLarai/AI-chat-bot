@@ -24,10 +24,15 @@ def main():
     
     client = genai.Client(api_key=api_key)
     
-    while True:
+    final_response = False
+    for _ in range(20):
         object = client.models.generate_content(
              model=model_name, contents=messages,
              config=types.GenerateContentConfig(tools=[available_functions], system_instruction=prompts.system_prompt, temperature=0, seed=42))
+        
+        # Append all candidates to the conversation history
+        for candidate in object.candidates:
+            messages.append(candidate.content)
         
         if object.usage_metadata != None and args.verbose:
                 print(f"User prompt: {args.user_prompt}")  
@@ -35,23 +40,29 @@ def main():
                 print(f"Response tokens: {object.usage_metadata.candidates_token_count}")
         
         if object.function_calls:
+            function_results = []
             for function_call in object.function_calls:
-                print(f"Calling function: {function_call.name}({function_call.args})")
-                func = function_map.get(function_call.name)
-                if func:
-                    # Assuming the function takes working_directory as first arg, and then the args
-                    working_directory = "/home/jamielarai/workspace/bootdotdev"  # workspace root
-                    result = func(working_directory, **function_call.args)
-                    # Add the tool response to messages
-                    messages.append(types.Content(
-                        role="user",
-                        parts=[types.Part(text=str(result))]
-                    ))
-                else:
-                    print(f"Function {function_call.name} not found")
+                function_call_result = call_function.call_function(function_call, verbose=args.verbose)
+                if not function_call_result.parts:
+                    raise Exception("No parts in function call result")
+                part = function_call_result.parts[0]
+                if part.function_response is None:
+                    raise Exception("No function_response in part")
+                if part.function_response.response is None:
+                    raise Exception("No response in function_response")
+                function_results.append(part)
+                if args.verbose:
+                    print(f"-> {part.function_response.response}")
+            if function_results:
+                messages.append(types.Content(role="user", parts=function_results))
         else:
             print(object.text)
+            final_response = True
             break
+    
+    if not final_response:
+        print("Maximum iterations reached without a final response. The agent may be stuck.")
+        exit(1)
 
 if __name__ == "__main__":
     main()
